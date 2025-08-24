@@ -1,0 +1,67 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String        @id @default(cuid())
+  name         String
+  bio          String?
+  createdAt    DateTime      @default(now())
+  posts        Post[]
+  follows      Follow[]      @relation("follower")
+  followers    Follow[]      @relation("followee")
+  notifications Notification[] @relation("NotificationToUser")
+  reactions Reaction[]
+}
+
+model Follow {
+  id         String   @id @default(cuid())
+  followerId String
+  followeeId String
+  createdAt  DateTime @default(now())
+  follower   User     @relation("follower", fields: [followerId], references: [id])
+  followee   User     @relation("followee", fields: [followeeId], references: [id])
+  @@unique([followerId, followeeId])
+}
+
+model Post {
+  id        String     @id @default(cuid())
+  authorId  String
+  content   String
+  createdAt DateTime   @default(now())
+  author    User       @relation(fields: [authorId], references: [id])
+  reactions Reaction[]
+}
+
+model Reaction {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  type      String // "like" | "comment"
+  text      String? // comment text
+  createdAt DateTime @default(now())
+  post      Post     @relation(fields: [postId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Notification {
+  id         String   @id @default(cuid())
+  userId     String // recipient
+  type       String // "new_post" | "new_comment" | "new_like" | "new_follow"
+  actorId    String
+  objectType String? // "post" | "user" | "comment"
+  objectId   String?
+  text       String // ready-to-show message (short)
+  createdAt  DateTime @default(now())
+  read       Boolean  @default(false)
+  aiScore    Float?
+  meta       Json?
+  user       User     @relation("NotificationToUser", fields: [userId], references: [id])
+  @@index([userId, createdAt])
+  @@index([userId, read])
+}
