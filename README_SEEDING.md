@@ -35,3 +35,13 @@ npm run dev
 ```
 
 Then open the app and use the "Reseed Data" button in the demo user selector or choose a user to see notifications.
+
+One-click (Windows PowerShell):
+
+1. Run the included helper to seed + start dev server:
+
+```powershell
+.\run-dev.ps1
+```
+
+This will ensure dependencies are installed, run the fast seed, and launch the dev server.

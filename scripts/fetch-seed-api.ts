@@ -1,6 +1,5 @@
-import fetch from 'node-fetch';
-
-(async () => {
+(
+  async () => {
   try {
     const res = await fetch('http://localhost:3000/api/seed');
     const body = await res.json();

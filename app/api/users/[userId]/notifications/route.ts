@@ -27,7 +27,7 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
     for (const n of notifications) {
       n.aiScore = await scoreNotificationForUser(n, userInterest, userInterestText);
     }
-    notifications = notifications.sort((a, b) => (b.aiScore || 0) - (a.aiScore || 0) || b.createdAt.getTime() - a.createdAt.getTime());
+  notifications = notifications.sort((a: any, b: any) => (b.aiScore || 0) - (a.aiScore || 0) || b.createdAt.getTime() - a.createdAt.getTime());
   }
 
   // Attach actorName
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
   }
 
   return NextResponse.json({
-    notifications: notifications.map(n => ({
+  notifications: notifications.map((n: any) => ({
       id: n.id,
       userId: n.userId,
       type: n.type,

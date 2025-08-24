@@ -29,7 +29,7 @@ export async function computeUserInterestVector(userId: string): Promise<number[
     take: 20,
     include: { post: true }
   });
-  const texts = reactions.map(r => r.post.content).filter(Boolean);
+    const texts = reactions.map((r: any) => r.post.content).filter(Boolean);
   const vectors: number[][] = [];
   for (const text of texts) {
     const embedding = await getEmbedding(text);

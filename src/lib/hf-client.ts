@@ -1,7 +1,5 @@
 // src/lib/hf-client.ts
 // Hugging Face embeddings API wrapper
-import fetch from 'node-fetch';
-
 const HF_API_TOKEN = process.env.HF_API_TOKEN;
 const HF_MODEL = 'sentence-transformers/all-MiniLM-L6-v2';
 
