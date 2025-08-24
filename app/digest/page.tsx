@@ -7,6 +7,17 @@ export default function DigestPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  function formatRelativeTime(dateStr: string | null) {
+    if (!dateStr) return 'never';
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diff = (now.getTime() - d.getTime()) / 1000;
+    if (diff < 60) return `${Math.floor(diff)}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return d.toLocaleDateString();
+  }
+
   async function generateDigest() {
     setLoading(true);
     setError('');
@@ -17,8 +28,11 @@ export default function DigestPage() {
       setLoading(false);
       return;
     }
-    const res = await fetch(`/api/users/${userId}/notifications?sort=ai&unreadOnly=true&limit=100`);
-    const data = await res.json();
+    const [notifRes, activityRes] = await Promise.all([
+      fetch(`/api/users/${userId}/notifications?sort=ai&unreadOnly=true&limit=100`),
+      fetch(`/api/users/${userId}/activity?days=7`),
+    ]);
+    const [data, activity] = await Promise.all([notifRes.json(), activityRes.json()]);
     if (!data.notifications) {
       setError('No notifications.');
       setLoading(false);
@@ -29,7 +43,8 @@ export default function DigestPage() {
     for (const n of data.notifications) {
       counts[n.type] = (counts[n.type] || 0) + 1;
     }
-    const summary = `Today: ${counts['new_follow'] || 0} new follows, ${counts['new_like'] || 0} likes, ${counts['new_comment'] || 0} comments, ${counts['new_post'] || 0} new posts.`;
+    const summary = `Today: ${counts['new_follow'] || 0} new follows, ${counts['new_like'] || 0} likes, ${counts['new_comment'] || 0} comments, ${counts['new_post'] || 0} new posts.`
+      + `\nActions performed (last 7 days): ${activity.postsMade || 0} posts made (last: ${formatRelativeTime(activity.lastPostAt || null)}), ${activity.likesMade || 0} likes given (last: ${formatRelativeTime(activity.lastLikeAt || null)}), ${activity.followsMade || 0} follows made (last: ${formatRelativeTime(activity.lastFollowAt || null)}).`;
     setDigest(summary);
     setLoading(false);
   }

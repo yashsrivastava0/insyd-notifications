@@ -17,23 +17,36 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
   let notifications = await prisma.notification.findMany({
     where,
     orderBy: sort === 'chrono' ? { createdAt: 'desc' } : undefined,
-    take: limit,
-    include: { user: true }
+    take: limit
   });
 
   if (sort === 'ai') {
-    const userInterest = await computeUserInterestVector(userId);
-    const userInterestText = '';
-    for (const n of notifications) {
-      n.aiScore = await scoreNotificationForUser(n, userInterest, userInterestText);
+    // If no HF token, avoid expensive embedding calls and fallback to chrono order
+    const HF_TOKEN = process.env.HF_API_TOKEN;
+    if (!HF_TOKEN) {
+      // lightweight heuristic: score by recency + simple type boost
+      for (const n of notifications) {
+        const recency = Math.exp(-((Date.now() - new Date(n.createdAt).getTime()) / 60000) / 180);
+        const typeBoost = n.type === 'new_follow' ? 0.3 : n.type === 'new_post' ? 0.2 : 0.1;
+        (n as any).aiScore = 0.6 * typeBoost + 0.4 * recency;
+      }
+      notifications = notifications.sort((a: any, b: any) => (b.aiScore || 0) - (a.aiScore || 0) || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    } else {
+      const userInterest = await computeUserInterestVector(userId);
+      const userInterestText = '';
+      for (const n of notifications) {
+        (n as any).aiScore = await scoreNotificationForUser(n, userInterest, userInterestText);
+      }
+      notifications = notifications.sort((a: any, b: any) => (b.aiScore || 0) - (a.aiScore || 0) || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }
-  notifications = notifications.sort((a: any, b: any) => (b.aiScore || 0) - (a.aiScore || 0) || b.createdAt.getTime() - a.createdAt.getTime());
   }
 
-  // Attach actorName
+  // Attach actorName (batch fetch to avoid N+1 queries)
+  const actorIds = Array.from(new Set(notifications.map((n: any) => n.actorId).filter(Boolean)));
+  const actors = actorIds.length ? await prisma.user.findMany({ where: { id: { in: actorIds } }, select: { id: true, name: true } }) : [];
+  const actorMap = new Map(actors.map((a: any) => [a.id, a.name]));
   for (const n of notifications) {
-    const actor = await prisma.user.findUnique({ where: { id: n.actorId } });
-    (n as any).actorName = actor?.name || n.actorId;
+    (n as any).actorName = actorMap.get(n.actorId) || String(n.actorId || 'Unknown');
   }
 
   return NextResponse.json({

@@ -1,7 +1,5 @@
-import { PrismaClient, Prisma } from '@prisma/client';
 import { getEmbedding } from '../src/lib/hf-client';
-
-const prisma = new PrismaClient();
+import { prisma } from '../src/lib/prismadb';
 
 // Demo users with roles and personalities for better interaction
 const DEMO_USERS = [

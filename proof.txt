@@ -1,0 +1,70 @@
+Insyd Notifications — Proof of Concept
+
+Purpose
+- Demonstrate a small, deployable notification system (Next.js app router + TypeScript + Prisma + PostgreSQL).
+- Provide a reproducible demo flow: fast seeding, demo actions (post / like / follow), notification creation, and a digest view that aggregates recent notifications and user activity.
+
+Architecture (short)
+- Frontend: Next.js (App Router), TypeScript, Tailwind CSS.
+- Backend: Next.js route handlers (serverless-style) using Prisma ORM to interact with a PostgreSQL database (Neon recommended).
+- Optional AI ranking: Hugging Face embeddings are used if HF_API_TOKEN is provided; otherwise a fast heuristic ranking is used.
+
+Key features
+- Fast bulk seeding (prisma/seed.ts) to populate demo users, follows, posts, reactions and notifications.
+- Demo buttons in the Notifications UI to create example events (new_post, new_like, new_follow).
+- Notification polling that is cancellable and prevents overlapping requests.
+- Digest page that aggregates unread notifications and shows recent actions performed by the selected user (with relative timestamps).
+
+How to run locally (Windows PowerShell)
+1. Install dependencies and generate Prisma client:
+   npm install
+   npx prisma generate
+2. Seed the demo data (fast bulk seed):
+   npm run prisma:seed
+3. Start the dev server:
+   npm run dev
+4. Open http://localhost:3000, select a demo user (top-right), then open Notifications and Digest.
+
+Demo verification (quick checklist to show to an interviewer)
+1. After seeding, select a demo user in the UI.
+2. In Notifications, click "New Post" — verify a new post notification appears in the list and Digest.
+3. Click "Like" — verify the post receives a new_like notification for the post author.
+4. Click "Follow" — verify the follow notification appears for the followed user and Digest shows actions performed by the selected user (with recent relative time like "5s ago").
+5. Confirm the notifications panel no longer exhibits continuous infinite-loading; requests should be paced (~15s) and cancel previous in-flight requests.
+
+Vercel deployment checklist (required steps)
+1. Environment variables on Vercel (Project -> Settings -> Environment Variables):
+   - DATABASE_URL (required) — your Postgres connection string.
+   - HF_API_TOKEN (optional) — for embeddings; if omitted the app uses a non-blocking heuristic.
+2. Ensure Prisma client generation runs during build. Options:
+   - Add `npx prisma generate` to your project's build step, or
+   - Add it to `postinstall` in package.json so it runs automatically after install.
+3. Connection pooling: For production, use Prisma Data Proxy or a pooled Postgres offering (Neon with pooling) to avoid connection exhaustion on serverless platforms.
+4. Build & settings: Default Next.js build (`next build`) is sufficient. Confirm Node version / runtime settings in Vercel if you pin runtime.
+
+Recommended Vercel runtime configuration
+- Use Prisma Data Proxy for safety on concurrent serverless instances, or configure your DB to support pooling.
+- Keep `HF_API_TOKEN` out of logs and only enable embedding-heavy ranking when needed.
+
+Troubleshooting
+- If notifications are not appearing:
+  - Confirm the selected user (localStorage key `insyd_user`) is set and valid.
+  - Check the /api/events route log entries to ensure events create corresponding DB rows.
+- If you see database connection errors in production:
+  - Enable Prisma Data Proxy or use Neon pooling.
+  - Increase connection limits or move long-running processes off the serverless runtime.
+
+Notes for maintainers
+- Seed script has two modes: fast bulk (default) and a slow embedding-enabled path (only use with HF API key).
+- The project is intentionally minimal and designed to be easy to explain in interviews: explain architecture, seeding/demo flow, and Vercel deployment steps.
+
+CI / Automated smoke test (recommended)
+- Add a small GitHub Action that runs:
+  - `npm ci && npx prisma generate && npm run prisma:seed` (or a lightweight test seed),
+  - `npx tsc --noEmit`, and optionally
+  - A script that hits `/api/seed`, `/api/events` and `/api/users/:id/notifications` to assert expected responses.
+
+Git / deployment notes
+- I pushed documentation changes to branch `poc/readme-vercel`. Create a PR to merge into `main` and enable Vercel automatic deployment.
+
+End of proof-of-concept

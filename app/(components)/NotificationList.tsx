@@ -45,11 +45,10 @@ function truncateText(str: string, n: number) {
 // Toast notification system
 function useNotificationToast() {
   const [toast, setToast] = useState<NotificationToast | null>(null);
-
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+  const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
-  };
+  }, []);
 
   const Toast = toast ? (
     <div
@@ -96,18 +95,35 @@ export default function NotificationList() {
     setUserId(getUserId());
   }, []);
 
-  // Fetch notifications with error handling
+  // Fetch notifications with error handling and cancellation support
+  const abortRef = /*#__PURE__*/ { current: null as AbortController | null };
+
   const fetchNotifications = useCallback(async () => {
     if (!userId) return;
+
+    // Cancel any in-flight request before starting a new one
+    try {
+      abortRef.current?.abort();
+    } catch (e) {
+      // ignore
+    }
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setLoading(true);
     try {
       const response = await fetch(
-        `/api/users/${userId}/notifications?sort=${sort}&unreadOnly=${unreadOnly}&limit=50`
+        `/api/users/${userId}/notifications?sort=${sort}&unreadOnly=${unreadOnly}&limit=50`,
+        { signal: controller.signal }
       );
       if (!response.ok) throw new Error('Failed to fetch notifications');
       const data = await response.json();
-      setNotifications(data.notifications || []);
-    } catch (error) {
+      setNotifications(Array.isArray(data.notifications) ? data.notifications : []);
+    } catch (error: any) {
+      if (error && error.name === 'AbortError') {
+        // Request was aborted; don't show an error toast in this case
+        return;
+      }
       showToast('Failed to load notifications', 'error');
       console.error('Error fetching notifications:', error);
     } finally {
@@ -115,12 +131,33 @@ export default function NotificationList() {
     }
   }, [userId, sort, unreadOnly, showToast]);
 
-  // Set up polling for real-time updates
+  // Set up polling for real-time updates using a single timeout loop and cancellation.
   useEffect(() => {
-    fetchNotifications();
-    const pollInterval = setInterval(fetchNotifications, 15000); // Poll every 15 seconds
-    return () => clearInterval(pollInterval);
-  }, [fetchNotifications]);
+    let stopped = false;
+    let timer: number | null = null;
+
+    const loop = async () => {
+      // Only fetch when we have a userId
+      if (!userId) return;
+      await fetchNotifications();
+      if (stopped) return;
+      // Schedule next poll
+      timer = window.setTimeout(loop, 15000);
+    };
+
+    // Start immediately if we have a userId
+    if (userId) loop();
+
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      try {
+        abortRef.current?.abort();
+      } catch (e) {
+        // ignore
+      }
+    };
+  }, [fetchNotifications, userId]);
 
   // Handle marking notifications as read
   const markRead = async (id: string) => {
@@ -159,12 +196,12 @@ export default function NotificationList() {
           };
           break;
         case "new_like":
-          const postsRes = await fetch(`/api/users/${randomUser.id}/notifications?sort=chrono&limit=1`);
-          const postsData = await postsRes.json();
+          // request a like against a recent post by the random user (server will find a post)
           event = { 
             ...event, 
+            type: 'new_like',
             objectType: "post", 
-            objectId: postsData.notifications[0]?.objectId || "", 
+            targetUserId: randomUser.id,
             text: `Liked a post by ${randomUser.name}` 
           };
           break;
@@ -181,14 +218,14 @@ export default function NotificationList() {
       const response = await fetch("/api/events", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(event),
+        body: JSON.stringify({ ...event, actorId: userId }),
       });
 
       if (!response.ok) throw new Error('Failed to create demo event');
       showToast(`Demo ${type.replace('new_', '')} created`, 'success');
       
-      // Wait briefly then fetch new notifications
-      setTimeout(fetchNotifications, 600);
+  // Wait briefly then fetch new notifications (await to avoid overlapping requests)
+  setTimeout(() => void fetchNotifications(), 600);
     } catch (error) {
       showToast('Failed to create demo event', 'error');
       console.error('Error creating demo event:', error);
